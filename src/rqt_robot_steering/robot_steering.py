@@ -38,6 +38,11 @@ from python_qt_binding.QtGui import QKeySequence
 from python_qt_binding.QtWidgets import QShortcut, QWidget
 from rclpy.qos import QoSProfile
 from rqt_gui_py.plugin import Plugin
+from rclpy.parameter import Parameter
+from rcl_interfaces.msg import ParameterDescriptor, ParameterType
+
+def has_parameter_value(node, name):
+    return node.has_parameter(name) and node._parameters[name].type_ != Parameter.Type.NOT_SET
 
 
 class RobotSteering(Plugin):
@@ -49,6 +54,14 @@ class RobotSteering(Plugin):
         self.setObjectName('RobotSteering')
 
         self._node = context.node
+        self._update_topic_type_timer = None
+
+        self._node.declare_parameter("default_topic", descriptor=ParameterDescriptor(type=ParameterType.PARAMETER_STRING))
+        self._node.declare_parameter("default_stamped", descriptor=ParameterDescriptor(type=ParameterType.PARAMETER_BOOL))
+        self._node.declare_parameter("default_vx_min", descriptor=ParameterDescriptor(type=ParameterType.PARAMETER_DOUBLE))
+        self._node.declare_parameter("default_vx_max", descriptor=ParameterDescriptor(type=ParameterType.PARAMETER_DOUBLE))
+        self._node.declare_parameter("default_vw_min", descriptor=ParameterDescriptor(type=ParameterType.PARAMETER_DOUBLE))
+        self._node.declare_parameter("default_vw_max", descriptor=ParameterDescriptor(type=ParameterType.PARAMETER_DOUBLE))
 
         self._publisher = None
         self._publisher_stamped = None
@@ -208,7 +221,8 @@ class RobotSteering(Plugin):
 
     def _on_topic_type_changed(self):
         topic = self._widget.topic_line_edit.text()
-        self._update_topic_type_timer.stop()
+        if self._update_topic_type_timer:
+            self._update_topic_type_timer.stop()
         if topic == '':
             return
         try:
@@ -221,6 +235,7 @@ class RobotSteering(Plugin):
         except Exception as e:
             print('Error creating publisher: %s' % e)
         
+
 
     def _on_stop_pressed(self):
         # If the current value of sliders is zero directly send stop twist msg
@@ -266,19 +281,19 @@ class RobotSteering(Plugin):
 
     def _on_max_x_linear_changed(self, value):
         self._widget.x_linear_slider.setMaximum(
-            value * RobotSteering.slider_factor)
+            int(value * RobotSteering.slider_factor))
 
     def _on_min_x_linear_changed(self, value):
         self._widget.x_linear_slider.setMinimum(
-            value * RobotSteering.slider_factor)
+            int(value * RobotSteering.slider_factor))
 
     def _on_max_z_angular_changed(self, value):
         self._widget.z_angular_slider.setMaximum(
-            value * RobotSteering.slider_factor)
+            int(value * RobotSteering.slider_factor))
 
     def _on_min_z_angular_changed(self, value):
         self._widget.z_angular_slider.setMinimum(
-            value * RobotSteering.slider_factor)
+            int(value * RobotSteering.slider_factor))
 
     def _on_strong_increase_x_linear_pressed(self):
         self._widget.x_linear_slider.setValue(
@@ -342,7 +357,8 @@ class RobotSteering(Plugin):
 
     def shutdown_plugin(self):
         self._update_parameter_timer.stop()
-        self._update_topic_type_timer.stop()
+        if self._update_topic_type_timer:
+            self._update_topic_type_timer.stop()
         self._unregister_publisher()
 
     def save_settings(self, plugin_settings, instance_settings):
@@ -360,31 +376,38 @@ class RobotSteering(Plugin):
             'vw_min', self._widget.min_z_angular_double_spin_box.value())
 
     def restore_settings(self, plugin_settings, instance_settings):
-        value = instance_settings.value('topic', '/cmd_vel')
-        value = self._node.get_parameter_or('~default_topic', value)
+        value = instance_settings.value('topic', "/cmd_vel")
+        if has_parameter_value(self._node, "default_topic"):
+            value = self._node.get_parameter('default_topic').get_parameter_value().string_value
         self._widget.topic_line_edit.setText(value)
                 
         value = self._widget.stamped_check_box.isChecked()        
         value = instance_settings.value('stamped', value)
-        value = self._node.get_parameter_or('~default_stamped', value)
-        self._widget.stamped_check_box.setChecked(value == 'true' or value == 'True')
+        if has_parameter_value(self._node, "default_stamped"):
+            value = self._node.get_parameter('default_stamped').get_parameter_value().bool_value
+        self._widget.stamped_check_box.setChecked(bool(value))
 
-        value = self._widget.max_x_linear_double_spin_box.value()
+        value = float(self._widget.max_x_linear_double_spin_box.value())
         value = instance_settings.value('vx_max', value)
-        value = self._node.get_parameter_or('~default_vx_max', value)
+        if has_parameter_value(self._node, "default_vx_max"):
+            value = self._node.get_parameter('default_vx_max').get_parameter_value().double_value
         self._widget.max_x_linear_double_spin_box.setValue(float(value))
 
         value = self._widget.min_x_linear_double_spin_box.value()
         value = instance_settings.value('vx_min', value)
-        value = self._node.get_parameter_or('~default_vx_min', value)
+        if has_parameter_value(self._node, "default_vx_min"):
+            value = self._node.get_parameter('default_vx_min').get_parameter_value().double_value
         self._widget.min_x_linear_double_spin_box.setValue(float(value))
 
         value = self._widget.max_z_angular_double_spin_box.value()
         value = instance_settings.value('vw_max', value)
-        value = self._node.get_parameter_or('~default_vw_max', value)
+        if has_parameter_value(self._node, "default_vw_max"):
+            value = self._node.get_parameter('default_vw_max').get_parameter_value().double_value
         self._widget.max_z_angular_double_spin_box.setValue(float(value))
 
         value = self._widget.min_z_angular_double_spin_box.value()
         value = instance_settings.value('vw_min', value)
-        value = self._node.get_parameter_or('~default_vw_min', value)
+        if has_parameter_value(self._node, "default_vw_min"):
+            value = self._node.get_parameter('default_vw_min').get_parameter_value().double_value
         self._widget.min_z_angular_double_spin_box.setValue(float(value))
+
