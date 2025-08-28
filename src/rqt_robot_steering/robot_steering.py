@@ -234,7 +234,6 @@ class RobotSteering(Plugin):
                 Twist, topic, qos_profile=QoSProfile(depth=10))
         except Exception as e:
             print('Error creating publisher: %s' % e)
-        
 
 
     def _on_stop_pressed(self):
